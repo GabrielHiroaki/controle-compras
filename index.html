@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Controle de Compras</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: #fff;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.top-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+select, button {
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+}
+
+button {
+    cursor: pointer;
+    background: #22c55e;
+    color: #000;
+    font-weight: bold;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+    background: #1e293b;
+}
+
+th, td {
+    padding: 8px;
+    border-bottom: 1px solid #334155;
+    text-align: center;
+}
+
+th {
+    background: #334155;
+}
+
+input {
+    width: 80px;
+    padding: 5px;
+    border-radius: 4px;
+    border: none;
+    text-align: center;
+}
+
+.item-name {
+    text-align: left;
+}
+
+.total {
+    font-weight: bold;
+    background: #020617;
+}
+
+.positivo { color: #22c55e; }
+.negativo { color: #ef4444; }
+.neutro { color: #94a3b8; }
+
+.add-btn {
+    margin-bottom: 10px;
+    background: #3b82f6;
+    color: white;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🛒 Controle de Compras</h1>
+
+<div class="top-bar">
+    <select id="mes"></select>
+    <select id="ano"></select>
+</div>
+
+<h2>ASSAÍ</h2>
+<button class="add-btn" onclick="addItem('assai')">+ Adicionar Item</button>
+<table id="assaiTable">
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Qtd</th>
+            <th>Preço</th>
+            <th>Total</th>
+            <th>Variação</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h2>AMAZON</h2>
+<button class="add-btn" onclick="addItem('amazon')">+ Adicionar Item</button>
+<table id="amazonTable">
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Qtd</th>
+            <th>Preço</th>
+            <th>Total</th>
+            <th>Variação</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h2>Total do Mês: R$ <span id="totalGeral">0.00</span></h2>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCKKmt7Y4qWdD2n0aliR3jEN2q4CG9OvdU",
+  authDomain: "controle-compras-3d295.firebaseapp.com",
+  projectId: "controle-compras-3d295",
+  storageBucket: "controle-compras-3d295.firebasestorage.app",
+  messagingSenderId: "362807394371",
+  appId: "1:362807394371:web:4a9a736a76a90b6b8b94f6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+const mesSelect = document.getElementById("mes");
+const anoSelect = document.getElementById("ano");
+
+meses.forEach((m,i)=>{
+    let op = document.createElement("option");
+    op.value = i;
+    op.textContent = m;
+    mesSelect.appendChild(op);
+});
+
+for(let i=2024;i<=2030;i++){
+    let op = document.createElement("option");
+    op.value = i;
+    op.textContent = i;
+    anoSelect.appendChild(op);
+}
+
+mesSelect.value = new Date().getMonth();
+anoSelect.value = new Date().getFullYear();
+mesSelect.addEventListener("change", carregarMes);
+anoSelect.addEventListener("change", carregarMes);
+
+function chaveMes(){
+    const mes = parseInt(mesSelect.value) + 1;
+    return `${anoSelect.value}-${mes}`;
+}
+
+function chaveMesAnterior(){
+    let m = parseInt(mesSelect.value);
+    let a = parseInt(anoSelect.value);
+
+    if(m === 0){
+        m = 11;
+        a--;
+    } else {
+        m--;
+    }
+
+    return `${a}-${m + 1}`; 
+}
+
+async function salvar(){
+    const dados = {
+        assai: getTableData("assaiTable"),
+        amazon: getTableData("amazonTable")
+    };
+
+    await setDoc(doc(db, "compras", chaveMes()), dados);
+}
+
+let carregando = false;
+async function carregarMes(){
+    carregando = true;
+
+    const ref = doc(db, "compras", chaveMes());
+    const snap = await getDoc(ref);
+
+    let dados;
+
+    if(snap.exists()){
+        dados = snap.data();
+    } else {
+        const refAnt = doc(db, "compras", chaveMesAnterior());
+        const snapAnt = await getDoc(refAnt);
+
+		if(snapAnt.exists()){
+			const anterior = snapAnt.data();
+
+			dados = {
+				assai: (anterior.assai || []).map(i => ({
+					...i,
+					id: crypto.randomUUID()
+				})),
+				amazon: (anterior.amazon || []).map(i => ({
+					...i,
+					id: crypto.randomUUID()
+				}))
+			};
+		} else {
+			dados = {assai:[], amazon:[]};
+		}
+
+   
+    }
+
+    render("assaiTable", dados.assai);
+    render("amazonTable", dados.amazon);
+
+    atualizarTotal();
+
+    carregando = false; 
+}
+
+function getTableData(id){
+    let rows = document.querySelectorAll(`#${id} tbody tr`);
+    let data = [];
+
+    rows.forEach(r=>{
+        let nome = r.children[0].innerText;
+        let qtd = r.children[1].children[0].value;
+        let preco = r.children[2].children[0].value;
+
+		data.push({
+			id: r.dataset.id,
+			nome,
+			qtd,
+			preco
+		});
+    });
+
+    return data;
+}
+
+async function render(id, data){
+    let tbody = document.querySelector(`#${id} tbody`);
+    tbody.innerHTML = "";
+
+    data.forEach(item=>{
+        let tr = document.createElement("tr");
+        tr.dataset.id = item.id || crypto.randomUUID();
+
+        tr.innerHTML = `
+            <td contenteditable="true" class="item-name">${item.nome}</td>
+            <td><input type="number" value="${item.qtd}"></td>
+            <td><input type="number" value="${item.preco}"></td>
+            <td class="totalItem">0</td>
+            <td class="variacao"></td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    await atualizarTabela(id);
+}
+
+async function atualizarTabela(id){
+    let rows = document.querySelectorAll(`#${id} tbody tr`);
+    const refAnt = doc(db, "compras", chaveMesAnterior());
+    const snapAnt = await getDoc(refAnt);
+    let anterior = snapAnt.exists() ? snapAnt.data() : {};
+
+    rows.forEach(r=>{
+        let qtd = parseFloat(r.children[1].children[0].value) || 0;
+        let preco = parseFloat(r.children[2].children[0].value) || 0;
+
+        let total = qtd * preco;
+        r.children[3].innerText = total.toFixed(2);
+
+        let listaAnterior = anterior[id.includes("assai") ? "assai":"amazon"] || [];
+		let nomeAtual = r.children[0].innerText.trim().toLowerCase();
+
+		let achou = listaAnterior.find(i => 
+			(i.nome || "").trim().toLowerCase() === nomeAtual
+		);
+
+        let variacao = r.children[4];
+
+        if(achou){
+            let old = parseFloat(achou.preco);
+            let diff = preco - old;
+
+            if(diff > 0){
+                variacao.innerText = `+${diff.toFixed(2)}`;
+                variacao.className = "positivo";
+            } else if(diff < 0){
+                variacao.innerText = diff.toFixed(2);
+                variacao.className = "negativo";
+            } else {
+                variacao.innerText = "0";
+                variacao.className = "neutro";
+            }
+        } else {
+            variacao.innerText = "-";
+        }
+    });
+
+    atualizarTotal();
+}
+
+function atualizarTotal(){
+    let total = 0;
+
+    document.querySelectorAll(".totalItem").forEach(t=>{
+        total += parseFloat(t.innerText) || 0;
+    });
+
+    document.getElementById("totalGeral").innerText = total.toFixed(2);
+}
+
+function addItem(tipo){
+    let table = document.querySelector(`#${tipo}Table tbody`);
+
+	let tr = document.createElement("tr");
+	tr.dataset.id = crypto.randomUUID();
+
+    tr.innerHTML = `
+        <td contenteditable="true" class="item-name">Novo Item</td>
+        <td><input type="number" value="1"></td>
+        <td><input type="number" value="0"></td>
+        <td class="totalItem">0</td>
+        <td>-</td>
+    `;
+
+    table.appendChild(tr);
+}
+
+document.addEventListener("input", ()=>{
+    atualizarTabela("assaiTable");
+    atualizarTabela("amazonTable");
+});
+document.addEventListener("change", (e)=>{
+    if(carregando) return;
+
+    const isInput = e.target.tagName === "INPUT";
+    const isEditable = e.target.isContentEditable;
+
+    if(isInput || isEditable){
+        salvar();
+    }
+});
+
+window.addItem = addItem;
+window.carregarMes = carregarMes;
+
+carregarMes();
+</script>
+
+</body>
+</html>
