@@ -128,9 +128,12 @@ input {
 </table>
 
 <h2>Total do Mês: R$ <span id="totalGeral">0.00</span></h2>
-
+<button onclick="gerarPDFMes()">📄 PDF do Mês</button>
+<button onclick="gerarPDFAno()">📊 PDF do Ano</button>
 </div>
 
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -218,16 +221,18 @@ async function carregarMes(){
 		if(snapAnt.exists()){
 			const anterior = snapAnt.data();
 
-			dados = {
-				assai: (anterior.assai || []).map(i => ({
-					...i,
-					id: crypto.randomUUID()
-				})),
-				amazon: (anterior.amazon || []).map(i => ({
-					...i,
-					id: crypto.randomUUID()
-				}))
-			};
+            dados = {
+                assai: (anterior.assai || []).map(i => ({
+                    ...i,
+                    qtd: 0, 
+                    id: crypto.randomUUID()
+                })),
+                amazon: (anterior.amazon || []).map(i => ({
+                    ...i,
+                    qtd: 0, 
+                    id: crypto.randomUUID()
+                }))
+            };
 		} else {
 			dados = {assai:[], amazon:[]};
 		}
@@ -356,6 +361,265 @@ function addItem(tipo){
     table.appendChild(tr);
 }
 
+async function gerarPDFMes(){
+    const { jsPDF } = window.jspdf;
+    const docPDF = new jsPDF();
+
+    const mesNome = meses[mesSelect.value];
+    const ano = anoSelect.value;
+
+    let y = 15;
+
+    // 🧾 CABEÇALHO
+    docPDF.setFillColor(30, 41, 59); // fundo escuro
+    docPDF.rect(0, 0, 210, 30, "F");
+
+    docPDF.setTextColor(255,255,255);
+    docPDF.setFontSize(16);
+    docPDF.text("RELATÓRIO DE COMPRAS", 105, 12, null, null, "center");
+
+    docPDF.setFontSize(11);
+    docPDF.text(`${mesNome} / ${ano}`, 105, 20, null, null, "center");
+
+    y = 40;
+    docPDF.setTextColor(0,0,0);
+
+    function desenharTabela(titulo, tabelaId){
+        // título
+        docPDF.setFontSize(13);
+        docPDF.text(titulo, 10, y);
+        y += 6;
+
+        // cabeçalho da tabela
+        docPDF.setFillColor(220,220,220);
+        docPDF.rect(10, y, 190, 8, "F");
+
+        docPDF.setFontSize(10);
+        docPDF.text("Item", 12, y+5);
+        docPDF.text("Qtd", 90, y+5);
+        docPDF.text("Preço", 110, y+5);
+        docPDF.text("Total", 140, y+5);
+        docPDF.text("Var", 170, y+5);
+
+        y += 10;
+
+        let rows = document.querySelectorAll(`#${tabelaId} tbody tr`);
+
+        rows.forEach(r=>{
+            let nome = r.children[0].innerText;
+            let qtd = r.children[1].children[0].value;
+            let preco = r.children[2].children[0].value;
+            let total = r.children[3].innerText;
+            let variacao = r.children[4].innerText;
+
+            docPDF.setFontSize(9);
+
+            docPDF.text(nome.substring(0,25), 12, y);
+            docPDF.text(qtd.toString(), 92, y);
+            docPDF.text(`R$ ${preco}`, 110, y);
+            docPDF.text(`R$ ${total}`, 140, y);
+            docPDF.text(variacao, 170, y);
+
+            y += 6;
+
+            if(y > 280){
+                docPDF.addPage();
+                y = 15;
+            }
+        });
+
+        y += 5;
+    }
+
+    desenharTabela("ASSAÍ", "assaiTable");
+    desenharTabela("AMAZON", "amazonTable");
+
+    // 💰 TOTAL DESTACADO
+    const total = document.getElementById("totalGeral").innerText;
+
+    y += 5;
+
+    docPDF.setFillColor(34,197,94);
+    docPDF.rect(10, y, 190, 10, "F");
+
+    docPDF.setTextColor(0,0,0);
+    docPDF.setFontSize(12);
+    docPDF.text(`TOTAL DO MÊS: R$ ${total}`, 105, y+7, null, null, "center");
+
+    y += 20;
+
+    // 🧠 ANÁLISE
+    let totalNum = parseFloat(total);
+    let analise = "Gasto controlado";
+    if(totalNum > 1000) analise = "Gasto elevado no mês";
+    if(totalNum === 0) analise = "Mês sem compras";
+
+    docPDF.setTextColor(0,0,0);
+    docPDF.setFontSize(11);
+    docPDF.text("Análise:", 10, y);
+    y += 6;
+
+    docPDF.setFontSize(10);
+    docPDF.text(`- ${analise}`, 12, y);
+
+    // rodapé
+    docPDF.setFontSize(8);
+    docPDF.setTextColor(150);
+    docPDF.text(
+        `Gerado automaticamente em ${new Date().toLocaleString()}`,
+        105,
+        290,
+        null,
+        null,
+        "center"
+    );
+
+    docPDF.save(`Relatorio_${mesNome}_${ano}.pdf`);
+}
+
+async function gerarPDFAno(){
+    const { jsPDF } = window.jspdf;
+    const docPDF = new jsPDF();
+
+    const ano = anoSelect.value;
+
+    let y = 15;
+
+    // 🧾 CABEÇALHO
+    docPDF.setFillColor(30, 41, 59);
+    docPDF.rect(0, 0, 210, 30, "F");
+
+    docPDF.setTextColor(255,255,255);
+    docPDF.setFontSize(16);
+    docPDF.text("RELATÓRIO ANUAL", 105, 12, null, null, "center");
+
+    docPDF.setFontSize(11);
+    docPDF.text(`${ano}`, 105, 20, null, null, "center");
+
+    y = 40;
+    docPDF.setTextColor(0,0,0);
+
+    let totais = [];
+
+    // 📊 COLETA DADOS
+    for(let m = 0; m < 12; m++){
+        const ref = doc(db, "compras", `${ano}-${m+1}`);
+        const snap = await getDoc(ref);
+
+        let totalMes = 0;
+
+        if(snap.exists()){
+            const dados = snap.data();
+
+            [...(dados.assai || []), ...(dados.amazon || [])].forEach(i=>{
+                let qtd = parseFloat(i.qtd) || 0;
+                let preco = parseFloat(i.preco) || 0;
+                totalMes += qtd * preco;
+            });
+        }
+
+        totais.push(totalMes);
+    }
+
+    // 📋 TABELA
+    docPDF.setFontSize(13);
+    docPDF.text("Resumo Mensal", 10, y);
+    y += 6;
+
+    docPDF.setFillColor(220,220,220);
+    docPDF.rect(10, y, 190, 8, "F");
+
+    docPDF.setFontSize(10);
+    docPDF.text("Mês", 20, y+5);
+    docPDF.text("Total (R$)", 140, y+5);
+
+    y += 10;
+
+    totais.forEach((total, i)=>{
+        let nomeMes = meses[i];
+
+        docPDF.setFontSize(10);
+        docPDF.text(nomeMes, 20, y);
+        docPDF.text(total.toFixed(2), 140, y);
+
+        y += 6;
+
+        if(y > 280){
+            docPDF.addPage();
+            y = 15;
+        }
+    });
+
+    // 📊 ANÁLISE
+    let soma = totais.reduce((a,b)=>a+b,0);
+    let media = soma / 12;
+    let maior = Math.max(...totais);
+    let menor = Math.min(...totais);
+
+    let mesMaior = meses[totais.indexOf(maior)];
+    let mesMenor = meses[totais.indexOf(menor)];
+
+    y += 10;
+
+    // 💰 BOX TOTAL
+    docPDF.setFillColor(34,197,94);
+    docPDF.rect(10, y, 190, 10, "F");
+
+    docPDF.setTextColor(0,0,0);
+    docPDF.setFontSize(12);
+    docPDF.text(`TOTAL NO ANO: R$ ${soma.toFixed(2)}`, 105, y+7, null, null, "center");
+
+    y += 20;
+
+    // 📈 DETALHES
+    docPDF.setFontSize(11);
+    docPDF.text("Análise Financeira:", 10, y);
+    y += 6;
+
+    docPDF.setFontSize(10);
+
+    docPDF.text(`• Média mensal: R$ ${media.toFixed(2)}`, 12, y);
+    y += 5;
+
+    docPDF.text(`• Maior gasto: ${mesMaior} (R$ ${maior.toFixed(2)})`, 12, y);
+    y += 5;
+
+    docPDF.text(`• Menor gasto: ${mesMenor} (R$ ${menor.toFixed(2)})`, 12, y);
+    y += 5;
+
+    // 🧠 INTERPRETAÇÃO AUTOMÁTICA
+    let analise = "Gastos equilibrados ao longo do ano";
+
+    if(maior > media * 1.5){
+        analise = "Existem picos de gastos em determinados meses";
+    }
+
+    if(soma === 0){
+        analise = "Nenhuma compra registrada no ano";
+    }
+
+    y += 5;
+
+    docPDF.text("Resumo:", 10, y);
+    y += 5;
+
+    docPDF.text(`- ${analise}`, 12, y);
+
+    // 🕒 RODAPÉ
+    docPDF.setFontSize(8);
+    docPDF.setTextColor(150);
+    docPDF.text(
+        `Gerado automaticamente em ${new Date().toLocaleString()}`,
+        105,
+        290,
+        null,
+        null,
+        "center"
+    );
+
+    docPDF.save(`Relatorio_Anual_${ano}.pdf`);
+}
+
 document.addEventListener("input", ()=>{
     atualizarTabela("assaiTable");
     atualizarTabela("amazonTable");
@@ -373,6 +637,8 @@ document.addEventListener("change", (e)=>{
 
 window.addItem = addItem;
 window.carregarMes = carregarMes;
+window.gerarPDFMes = gerarPDFMes;
+window.gerarPDFAno = gerarPDFAno;
 
 carregarMes();
 </script>
